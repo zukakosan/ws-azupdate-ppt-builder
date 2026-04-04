@@ -61,7 +61,7 @@ STATUS_COLORS = {
 CONTENT_LEFT = Emu(457200)      # 左位置 約 0.5 inch
 CONTENT_TOP = Emu(939983)
 CONTENT_HEIGHT = Emu(5460817)   # スライド下端近くまで拡張
-CONTENT_WIDTH = Emu(10561638)   # 左オフセット分を差し引いた幅
+CONTENT_WIDTH = Emu(11277600)   # 左右対称マージン (12192000 - 2*457200)
 
 # テキストフレーム内部余白 (EMU)
 TF_MARGIN_LEFT = Emu(365760)    # 約 0.4 inch
@@ -76,7 +76,7 @@ MAX_BULLETS = 5
 BULLET_INDENT = 228600   # 約 0.25 inch = 0.64 cm
 
 # 説明文1行あたり最大文字数（超えたら要約的に短縮）
-MAX_DESC_CHARS = 120
+MAX_DESC_CHARS = 300
 
 
 # --- ヘルパー関数 ---
