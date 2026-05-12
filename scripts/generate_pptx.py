@@ -17,25 +17,43 @@ from pptx.oxml.ns import qn
 
 # --- 定数 ---
 TEMPLATE_PATH = "template/template.pptx"
-DATA_PATH = "output/20260404/updates_ja.json"
-OUTPUT_PATH = "output/20260404/azure-updates.pptx"
+DATA_PATH = "output/20260512/updates_ja.json"
+OUTPUT_PATH = "output/20260512/azure-updates.pptx"
+COVER_PERIOD = "2026/04/13 〜 2026/05/07"
 
 # テンプレートレイアウトインデックス（template 実測値）
 LAYOUT_COVER = 0        # "1_Title Slide" (ph idx=0: Title, idx=12: Subtitle)
 LAYOUT_CONTENT = 1      # "タイトルとコンテンツ" (ph idx=0: Title, idx=10: Content)
 LAYOUT_SECTION = 3      # "Section Title" (ph idx=0: Title)
 
-# カテゴリ表示順
+# カテゴリ表示順（実データのカテゴリ名・件数の多い順を基本とする）
 CATEGORY_ORDER = [
-    "セキュリティ",
-    "ネットワーク",
+    "ストレージ",
+    "データベース",
+    "AI + 機械学習",
     "コンピューティング",
-    "データ & AI",
-    "DevOps & 開発者ツール",
+    "セキュリティ",
+    "コンテナー",
+    "モニタリング",
+    "ネットワーク",
     "管理 & ガバナンス",
+    "DevOps",
+    "統合",
+    "分析",
     "ハイブリッド & マルチクラウド",
-    "IoT",
+    "移行",
     "その他",
+]
+
+# 冒頭で強調する注目「廃止 / サポート終了」項目
+# (タイトルに含まれるキーワード, ラベル, 期限) の順
+HIGHLIGHT_DEPRECATIONS = [
+    ("Prompt Flow", "Prompt Flow 廃止", "2027-04-20"),
+    (".NET 8", ".NET 8 (LTS) サポート終了", "2026-11-10"),
+    ("Functions runtime v3", "Azure Functions runtime v3 on Linux Consumption 停止", "2026-09-30"),
+    ("旧世代", "旧世代 VM 予約インスタンス廃止", "2026-07-01"),
+    ("Ubuntu 22.04", "AKS Ubuntu 22.04 廃止", "2027-06-30"),
+    ("Document Intelligence v3.0", "Document Intelligence v3.0 API 廃止", "2029-03-30"),
 ]
 
 # 重要度ソート順
@@ -229,7 +247,7 @@ def create_cover_slide(prs):
     sub_ph = slide.placeholders[12]
     _clear_text_frame(sub_ph.text_frame)
     run = sub_ph.text_frame.paragraphs[0].add_run()
-    run.text = "2026/03/09 〜 2026/04/03"
+    run.text = COVER_PERIOD
     _set_font(run, Pt(20), color=COLOR_WHITE)
 
 
@@ -279,6 +297,83 @@ def create_summary_slide(prs, updates):
         if count > 0:
             p = _add_para(tf, f"{cat}: {count}件", Pt(18), color=COLOR_TEXT, space_before=2)
             p.level = 1
+
+
+def _find_highlight_items(updates):
+    """注目廃止アイテムを updates から検索して、(meta, item_or_None) のリストを返す。"""
+    results = []
+    for keyword, label, deadline in HIGHLIGHT_DEPRECATIONS:
+        match = None
+        kw_lower = keyword.lower()
+        for item in updates:
+            title = (item.get("title_en", "") + " " + item.get("title_ja", "")).lower()
+            desc = (item.get("description_en", "") + " " + item.get("description_ja", "")).lower()
+            if kw_lower in title or kw_lower in desc:
+                match = item
+                break
+        results.append((label, deadline, match))
+    return results
+
+
+def create_highlight_slide(prs, updates):
+    """注目: 廃止 / サポート終了 スライド。"""
+    layout = prs.slide_layouts[LAYOUT_CONTENT]
+    slide = prs.slides.add_slide(layout)
+
+    # タイトル
+    title_ph = slide.placeholders[0]
+    _clear_text_frame(title_ph.text_frame)
+    run = title_ph.text_frame.paragraphs[0].add_run()
+    run.text = "注目: 廃止 / サポート終了"
+    _set_font(run, Pt(28), bold=True, color=RGBColor(0xD1, 0x34, 0x38))
+
+    # コンテンツ
+    content_ph = slide.placeholders[10]
+    _resize_content_ph(content_ph)
+    tf = content_ph.text_frame
+    tf.word_wrap = True
+    _clear_text_frame(tf)
+
+    # リード文
+    p = tf.paragraphs[0]
+    run = p.add_run()
+    run.text = "今期のアップデートに含まれる主要な廃止 / サポート終了スケジュール"
+    _set_font(run, Pt(16), bold=True, color=COLOR_TEXT)
+
+    items = _find_highlight_items(updates)
+    for label, deadline, item in items:
+        # 1行目: ラベル + 期限
+        p = tf.add_paragraph()
+        p.level = 1
+        p.space_before = Pt(8)
+        r1 = p.add_run()
+        r1.text = f"{label}"
+        _set_font(r1, Pt(16), bold=True, color=RGBColor(0xD1, 0x34, 0x38))
+        r2 = p.add_run()
+        r2.text = f"  ─ 期限: {deadline}"
+        _set_font(r2, Pt(15), bold=False, color=COLOR_TEXT)
+
+        # 該当アップデートが見つかれば、簡単なメモ + リンク
+        if item is not None:
+            link_url = item.get("link", "")
+            if not link_url and item.get("id"):
+                link_url = f"https://azure.microsoft.com/updates/?id={item.get('id')}"
+            title_ja = item.get("title_ja", "")
+            # メモ行
+            p = tf.add_paragraph()
+            p.level = 2
+            p.space_before = Pt(2)
+            r = p.add_run()
+            r.text = title_ja[:80] + ("…" if len(title_ja) > 80 else "")
+            _set_font(r, Pt(13), color=COLOR_GRAY)
+            if link_url:
+                r2 = p.add_run()
+                r2.text = "  "
+                _set_font(r2, Pt(13), color=COLOR_GRAY)
+                r3 = p.add_run()
+                r3.text = link_url
+                _set_font(r3, Pt(13), color=COLOR_BLUE)
+                r3.hyperlink.address = link_url
 
 
 def create_section_slide(prs, category_name, count):
@@ -399,10 +494,13 @@ def main():
     print("Creating summary slide ...")
     create_summary_slide(prs, updates)
 
+    print("Creating highlight slide (deprecations) ...")
+    create_highlight_slide(prs, updates)
+
     print("Grouping and sorting updates ...")
     grouped = group_and_sort(updates)
 
-    slide_count = 2  # cover + summary
+    slide_count = 3  # cover + summary + highlight
     for category, items in grouped.items():
         print(f"  {category}: {len(items)} items")
         create_section_slide(prs, category, len(items))
